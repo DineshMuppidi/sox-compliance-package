@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+"""
+COSO 2013 Internal Control — Integrated Framework -> IT General Control Mapping
+====================================================================================
+Maps all 17 COSO 2013 principles, across the 5 components (Control Environment,
+Risk Assessment, Control Activities, Information & Communication, Monitoring
+Activities), to this organization's SOX IT General Controls (see itgc_catalog.py).
+
+Several principles (e.g. board independence, entity-wide ethics) are inherently
+entity-level rather than IT-specific; those rows are retained for completeness
+and flagged "Entity-Level (outside ITGC scope)" rather than left unmapped, since
+a SOX control-design package should show the full COSO cube, not just the IT slice.
+
+Outputs
+-------
+  outputs/coso-mapping.xlsx
+  outputs/coso-mapping.md
+
+Run:  python3 sox/coso-controls.py
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+from openpyxl import Workbook
+
+sys.path.insert(0, os.path.dirname(__file__))
+from itgc_catalog import CATALOG_BY_ID, control_titles  # noqa: E402
+from xlsx_style import (  # noqa: E402
+    add_table, autosize_columns, style_data_rows, style_header_row,
+    style_title_block, write_legend_sheet,
+)
+
+OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "outputs")
+os.makedirs(OUT_DIR, exist_ok=True)
+
+RISK_DEFINITIONS = {
+    "Low": "Principle is well supported by mapped ITGCs; monitor via routine review cycle.",
+    "Medium": "Principle substantially supported; minor design or evidence gaps to close.",
+    "High": "Principle has a material design or operating gap; requires remediation this quarter.",
+    "Critical": "Principle is not currently supported; represents a likely control deficiency.",
+}
+
+# component, principle_id, principle_description, itgc_ids (empty = entity-level),
+# design_status, gap_rating, notes
+ROWS = [
+    ("Control Environment", "P1",
+     "The organization demonstrates a commitment to integrity and ethical values.",
+     [], "Implemented", "Low",
+     "Entity-Level (outside ITGC scope) — supported by Code of Conduct, HR onboarding "
+     "attestation, and whistleblower hotline."),
+    ("Control Environment", "P2",
+     "The board of directors demonstrates independence from management and exercises "
+     "oversight of the development and performance of internal control.",
+     [], "Implemented", "Low",
+     "Entity-Level (outside ITGC scope) — Audit Committee charter and quarterly ICFR "
+     "reporting cadence in place."),
+    ("Control Environment", "P3",
+     "Management establishes, with board oversight, structures, reporting lines, and "
+     "appropriate authorities and responsibilities in the pursuit of objectives.",
+     ["SOX-ITGC-001", "SOX-ITGC-002", "SOX-ITGC-003", "SOX-ITGC-004"], "In Progress", "Medium",
+     "Access request/approval hierarchy defines authority for provisioning and privileged "
+     "access; formal delegation-of-authority matrix for system ownership still in draft."),
+    ("Control Environment", "P4",
+     "The organization demonstrates a commitment to attract, develop, and retain competent "
+     "individuals in alignment with objectives.",
+     [], "Implemented", "Low",
+     "Entity-Level (outside ITGC scope) — IT Security and Change Management staff complete "
+     "annual role-based training; tracked in the LMS."),
+    ("Control Environment", "P5",
+     "The organization holds individuals accountable for their internal control "
+     "responsibilities in the pursuit of objectives.",
+     ["SOX-ITGC-001", "SOX-ITGC-002", "SOX-ITGC-003", "SOX-ITGC-005"], "In Progress", "Medium",
+     "Approvers and reviewers are individually identified and evidenced on access requests "
+     "and UARs; formal accountability escalation for missed UAR SLAs not yet defined."),
+
+    ("Risk Assessment", "P6",
+     "The organization specifies objectives with sufficient clarity to enable the "
+     "identification and assessment of risks relating to objectives.",
+     [], "Implemented", "Low",
+     "Entity-Level (outside ITGC scope) — financial reporting objectives and materiality "
+     "thresholds set annually by Controller's Office and external auditor scoping."),
+    ("Risk Assessment", "P7",
+     "The organization identifies risks to the achievement of its objectives across the "
+     "entity and analyzes risks as a basis for determining how the risks should be managed.",
+     ["SOX-ITGC-006"], "In Progress", "Medium",
+     "Change risk classification (standard/emergency, financial-system impact) drives "
+     "approval routing; formal risk-scoring rubric for changes is being finalized."),
+    ("Risk Assessment", "P8",
+     "The organization considers the potential for fraud in assessing risks to the "
+     "achievement of objectives.",
+     ["SOX-ITGC-004"], "In Progress", "High",
+     "SoD conflict rule set covers core P2P/O2C conflicts; fraud-scenario coverage "
+     "(e.g., vendor master + payment conflicts) is being expanded this quarter."),
+    ("Risk Assessment", "P9",
+     "The organization identifies and assesses changes that could significantly impact the "
+     "system of internal control.",
+     ["SOX-ITGC-006", "SOX-ITGC-007"], "In Progress", "Medium",
+     "Standard and emergency change processes both capture financial-system impact; "
+     "quarterly significant-change review with Controller's Office not yet formalized."),
+
+    ("Control Activities", "P10",
+     "The organization selects and develops control activities that contribute to the "
+     "mitigation of risks to the achievement of objectives to acceptable levels.",
+     ["SOX-ITGC-001", "SOX-ITGC-002", "SOX-ITGC-003", "SOX-ITGC-004", "SOX-ITGC-005",
+      "SOX-ITGC-006", "SOX-ITGC-007", "SOX-ITGC-008", "SOX-ITGC-009"], "In Progress", "Medium",
+     "All 9 ITGCs are designed and mapped to this principle; 6 of 9 have completed a "
+     "design-effectiveness walkthrough (see Audit Readiness)."),
+    ("Control Activities", "P11",
+     "The organization selects and develops general control activities over technology to "
+     "support the achievement of objectives.",
+     ["SOX-ITGC-001", "SOX-ITGC-002", "SOX-ITGC-003", "SOX-ITGC-004", "SOX-ITGC-005",
+      "SOX-ITGC-006", "SOX-ITGC-007", "SOX-ITGC-008", "SOX-ITGC-009"], "In Progress", "Medium",
+     "Core ITGC principle — every catalog control maps here by definition. This is the "
+     "primary COSO principle this package is designed to demonstrate."),
+    ("Control Activities", "P12",
+     "The organization deploys control activities through policies that establish what is "
+     "expected and procedures that put policies into action.",
+     ["SOX-ITGC-001", "SOX-ITGC-002", "SOX-ITGC-006"], "Planned", "Medium",
+     "Access Management and Change Management procedures are documented; formal policy "
+     "sign-off/publication to a central policy repository is planned for next quarter."),
+
+    ("Information & Communication", "P13",
+     "The organization obtains or generates and uses relevant, quality information to "
+     "support the functioning of internal control.",
+     ["SOX-ITGC-008", "SOX-ITGC-009"], "In Progress", "Medium",
+     "Centralized log aggregation and batch-job monitoring dashboards provide operational "
+     "data; formal data-quality checks on the log pipeline are still ad hoc."),
+    ("Information & Communication", "P14",
+     "The organization internally communicates information, including objectives and "
+     "responsibilities for internal control, necessary to support the functioning of "
+     "internal control.",
+     ["SOX-ITGC-005", "SOX-ITGC-007"], "In Progress", "Medium",
+     "UAR sign-off and emergency-change retroactive approval both route through named "
+     "owners; a standing internal-control communications calendar is being drafted."),
+    ("Information & Communication", "P15",
+     "The organization communicates with external parties regarding matters affecting the "
+     "functioning of internal control.",
+     [], "Planned", "Medium",
+     "Entity-Level (outside ITGC scope) — external auditor walkthrough cadence exists; "
+     "formal protocol for control-deficiency disclosure to external auditors in draft."),
+
+    ("Monitoring Activities", "P16",
+     "The organization selects, develops, and performs ongoing and/or separate evaluations "
+     "to ascertain whether the components of internal control are present and functioning.",
+     ["SOX-ITGC-005", "SOX-ITGC-007", "SOX-ITGC-008", "SOX-ITGC-009"], "In Progress", "Medium",
+     "Quarterly UAR, log/alert monitoring, and batch-job monitoring together provide "
+     "ongoing evaluation; a separate (independent of process owners) annual ITGC "
+     "self-assessment is planned but not yet run."),
+    ("Monitoring Activities", "P17",
+     "The organization evaluates and communicates internal control deficiencies in a timely "
+     "manner to those parties responsible for taking corrective action, including senior "
+     "management and the board of directors as appropriate.",
+     ["SOX-ITGC-005", "SOX-ITGC-007", "SOX-ITGC-008"], "Planned", "High",
+     "Deficiencies surfaced during UAR and emergency-change review are logged; a formal "
+     "deficiency-escalation path to the Audit Committee is not yet documented."),
+]
+
+HEADERS = ["COSO Component", "Principle", "Principle Description", "Mapped ITGC(s)",
+           "ITGC Title(s)", "Design Status", "Gap Rating", "Notes"]
+
+
+def build_workbook() -> Workbook:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "COSO Mapping"
+    ws.sheet_view.showGridLines = False
+
+    header_row = style_title_block(
+        ws,
+        "COSO 2013 Framework -> IT General Control Mapping",
+        "SOX Compliance Package | Confidential - Internal Use | Generated by coso-controls.py",
+        n_cols=len(HEADERS),
+    )
+    for col, h in enumerate(HEADERS, start=1):
+        ws.cell(row=header_row, column=col, value=h)
+    style_header_row(ws, header_row, len(HEADERS))
+
+    r = header_row + 1
+    first_data_row = r
+    for component, pid, desc, itgc_ids, status, gap, notes in ROWS:
+        ctl_titles = control_titles(*itgc_ids) if itgc_ids else "Entity-Level (outside ITGC scope)"
+        ws.cell(row=r, column=1, value=component)
+        ws.cell(row=r, column=2, value=pid)
+        ws.cell(row=r, column=3, value=desc)
+        ws.cell(row=r, column=4, value=", ".join(itgc_ids) if itgc_ids else "—")
+        ws.cell(row=r, column=5, value=ctl_titles)
+        ws.cell(row=r, column=6, value=status)
+        ws.cell(row=r, column=7, value=gap)
+        ws.cell(row=r, column=8, value=notes)
+        r += 1
+    last_data_row = r - 1
+
+    style_data_rows(ws, first_data_row, last_data_row, len(HEADERS),
+                     risk_col=7, status_col=6)
+    autosize_columns(ws, {1: 24, 2: 10, 3: 50, 4: 26, 5: 40, 6: 15, 7: 12, 8: 50})
+    add_table(ws, "COSOMapping", f"A{header_row}:H{last_data_row}")
+
+    write_legend_sheet(wb, RISK_DEFINITIONS)
+    return wb
+
+
+def write_markdown(path: str):
+    lines = [
+        "# COSO 2013 Framework -> IT General Control Mapping",
+        "",
+        "*SOX Compliance Package | Confidential - Internal Use*",
+        "",
+        "Maps all 17 COSO 2013 principles across the 5 components to this organization's "
+        f"SOX IT General Controls (see `sox/itgc_catalog.py`). {sum(1 for r in ROWS if r[3])} "
+        f"of 17 principles have a direct ITGC mapping; the remainder are entity-level "
+        "controls retained here for completeness of the COSO cube.",
+        "",
+        "| Component | Principle | Description | Mapped ITGC(s) | Design Status | Gap Rating | Notes |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for component, pid, desc, itgc_ids, status, gap, notes in ROWS:
+        ids_str = ", ".join(itgc_ids) if itgc_ids else "Entity-Level"
+        lines.append(
+            f"| {component} | {pid} | {desc} | {ids_str} | {status} | **{gap}** | {notes} |"
+        )
+    lines += ["", "## Gap Rating Legend", ""]
+    for level, definition in RISK_DEFINITIONS.items():
+        lines.append(f"- **{level}**: {definition}")
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def main():
+    wb = build_workbook()
+    xlsx_path = os.path.join(OUT_DIR, "coso-mapping.xlsx")
+    wb.save(xlsx_path)
+    md_path = os.path.join(OUT_DIR, "coso-mapping.md")
+    write_markdown(md_path)
+    print(f"Wrote {xlsx_path}")
+    print(f"Wrote {md_path}")
+    mapped = sum(1 for r in ROWS if r[3])
+    print(f"{len(ROWS)} COSO principles ({mapped} mapped to ITGCs, {len(ROWS) - mapped} entity-level)")
+
+
+if __name__ == "__main__":
+    main()
